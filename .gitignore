@@ -1,0 +1,14 @@
+# local build artefact
+/gox
+
+# OS noise
+.DS_Store
+
+# editor scratch
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# go cache (just in case)
+/.cache/
