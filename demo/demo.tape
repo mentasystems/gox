@@ -15,42 +15,24 @@ Set PlaybackSpeed 1.0
 
 # Land in the demo project.
 Hide
-Type "cd demo/example && clear" Enter
-Sleep 300ms
+Type "cd example && clear" Enter
+Sleep 400ms
 Show
 
 Type "cat main.go"
 Enter
-Sleep 3s
+Sleep 3500ms
 
-Type "# Both args are strings. Wrong order compiles fine."
-Sleep 1500ms
+Type "# Both args are strings. Wrong order compiles fine. Tests pass."
+Sleep 1800ms
 Enter
-Sleep 800ms
-
-Type "gox check ./..."
-Enter
-Sleep 4s
-
-Type "# gox catches the swap-prone call site."
-Sleep 1500ms
-Enter
-Sleep 600ms
-
-# Fix by adding inline /* paramName */ comments.
-Type `sed -i '' 's|transfer("o-42", "u-7")|transfer(/* userID */ "u-7" /* orderID */, "o-42")|' main.go`
-Enter
-Sleep 800ms
-
-Type "cat main.go"
-Enter
-Sleep 3s
+Sleep 700ms
 
 Type "gox check ./..."
 Enter
+Sleep 4500ms
+
+Type "# Bug caught at edit time, before it ever runs."
 Sleep 2500ms
-
-Type "# clean. Bug prevented, call site self-documenting."
-Sleep 2s
 Enter
-Sleep 1500ms
+Sleep 1800ms
