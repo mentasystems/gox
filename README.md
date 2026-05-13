@@ -158,8 +158,8 @@ production gate.
 
 - **Zero external dependencies.** Everything uses Go stdlib + a shell-out to
   `go list -json`. No `golang.org/x/tools`, no third-party linter packages.
-  Mantenimiento mínimo: cuando salga una nueva versión de Go, no hay nada que
-  actualizar.
+  Minimal maintenance: when a new Go release ships, there's nothing to
+  update.
 - **Fail closed.** Every rule defaults to error. Opt-outs require an explicit
   annotation with a written reason — the reason is the documentation.
 - **Targeted at LLM-written code.** Heuristics are tuned so each rule catches
