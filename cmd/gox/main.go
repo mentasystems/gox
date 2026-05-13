@@ -13,9 +13,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/mentasystems/gox/pkg/analyzer"
+	"github.com/mentasystems/gox/pkg/baseline"
 	"github.com/mentasystems/gox/pkg/cache"
 	"github.com/mentasystems/gox/pkg/loader"
 
@@ -55,6 +57,8 @@ func main() {
 		os.Exit(runGo("test", args))
 	case "install":
 		os.Exit(runInstall(args))
+	case "baseline":
+		os.Exit(runBaseline(args))
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -73,10 +77,13 @@ Usage:
   gox list                  list registered analyzers
   gox build [args...]       run check, then go build
   gox test  [args...]       run check, then go test
+  gox baseline              capture current issues into .gox-baseline.json
+                            at the module root; check filters these out
   gox install claude        install PostToolUse hook into ~/.claude/settings.json
 
 check flags:
   --no-cache                disable the incremental cache
+  --no-baseline             ignore .gox-baseline.json; report all issues
   --stats                   print cache hit/miss counts and elapsed time
 `)
 }
@@ -90,41 +97,26 @@ func runList() {
 func runCheck(args []string) int {
 	fs := flag.NewFlagSet("check", flag.ContinueOnError)
 	noCache := fs.Bool("no-cache", false, "disable the incremental cache")
+	noBaseline := fs.Bool("no-baseline", false, "ignore .gox-baseline.json; report all issues")
 	stats := fs.Bool("stats", false, "print cache hit/miss counts and elapsed time")
 	if parseErr := fs.Parse(args); parseErr != nil {
 		return 2
 	}
 	patterns := fs.Args()
 
-	analyzers := analyzer.All()
-	opts := analyzer.RunOptions{UseCache: !*noCache}
-
-	if opts.UseCache {
-		dir, dirErr := cache.Dir()
-		if dirErr != nil {
-			fmt.Fprintf(os.Stderr, "gox: cache dir: %v\n", dirErr)
-			opts.UseCache = false
-		} else {
-			version := cache.AnalyzersVersion(analyzers)
-			opts.CacheKey = func(info *loader.PackageInfo) (string, error) {
-				return cache.Key(info.ImportPath, info.AbsFiles(), version)
-			}
-			opts.CacheGet = func(key string) ([]analyzer.Issue, bool) {
-				return cache.Get(dir, key)
-			}
-			opts.CachePut = func(key string, issues []analyzer.Issue) error {
-				return cache.Put(dir, key, issues)
-			}
-		}
-	}
-
-	start := time.Now()
-	issues, runStats, runErr := analyzer.Run(patterns, analyzers, opts)
-	elapsed := time.Since(start)
+	issues, runStats, elapsed, runErr := runAnalyzers(patterns, *noCache)
 	if runErr != nil {
 		fmt.Fprintln(os.Stderr, "gox:", runErr)
 		return 2
 	}
+
+	// Baseline filtering (only for `check`, not `baseline` capture).
+	totalBeforeFilter := len(issues)
+	baselinedCount := 0
+	if !*noBaseline {
+		issues, baselinedCount = applyBaseline(issues)
+	}
+
 	for _, is := range issues {
 		fmt.Printf("%s:%d:%d: %s: %s\n", is.Pos.Filename, is.Pos.Line, is.Pos.Column, is.Analyzer, is.Message)
 		if is.Hint != "" {
@@ -134,11 +126,103 @@ func runCheck(args []string) int {
 	if *stats {
 		fmt.Fprintf(os.Stderr, "gox: %d packages (hits=%d misses=%d) in %s\n",
 			runStats.PackagesTotal, runStats.CacheHits, runStats.CacheMisses, elapsed.Round(time.Millisecond))
+		if baselinedCount > 0 {
+			fmt.Fprintf(os.Stderr, "gox: %d baselined / %d total\n", baselinedCount, totalBeforeFilter)
+		}
 	}
 	if len(issues) > 0 {
 		fmt.Fprintf(os.Stderr, "gox: %d issue(s)\n", len(issues))
 		return 1
 	}
+	return 0
+}
+
+// runAnalyzers wires the cache and runs the analyzers — shared by `check`
+// and `baseline`.
+func runAnalyzers(patterns []string, noCache bool) ([]analyzer.Issue, analyzer.Stats, time.Duration, error) {
+	analyzers := analyzer.All()
+	opts := analyzer.RunOptions{UseCache: !noCache}
+
+	if opts.UseCache {
+		dir, dirErr := cache.Dir()
+		if dirErr != nil {
+			fmt.Fprintf(os.Stderr, "gox: cache dir: %v\n", dirErr)
+			opts.UseCache = false
+		} else {
+			version := cache.AnalyzersVersion(analyzers)
+			opts.CacheKey = func(info *loader.PackageInfo) (string, error) {
+				return cache.Key( /* importPath */ info.ImportPath /* files */, info.AbsFiles() /* analyzersVersion */, version)
+			}
+			opts.CacheGet = func(key string) ([]analyzer.Issue, bool) {
+				return cache.Get( /* dir */ dir /* key */, key)
+			}
+			opts.CachePut = func(key string, issues []analyzer.Issue) error {
+				return cache.Put( /* dir */ dir /* key */, key, issues)
+			}
+		}
+	}
+
+	start := time.Now()
+	issues, runStats, runErr := analyzer.Run(patterns, analyzers, opts)
+	return issues, runStats, time.Since(start), runErr
+}
+
+// applyBaseline loads .gox-baseline.json from the module root (if present)
+// and filters out matching issues. Returns the filtered issues and the count
+// removed.
+func applyBaseline(issues []analyzer.Issue) ([]analyzer.Issue, int) {
+	root, rootErr := baseline.ModuleRoot()
+	if rootErr != nil {
+		return issues, 0
+	}
+	bf, loadErr := baseline.Load(filepath.Join(root, baseline.Filename))
+	if loadErr != nil {
+		fmt.Fprintln(os.Stderr, "gox baseline:", loadErr)
+		return issues, 0
+	}
+	if bf == nil {
+		return issues, 0
+	}
+	filtered := bf.Filter( /* issues */ issues /* moduleRoot */, root)
+	return filtered, len(issues) - len(filtered)
+}
+
+func runBaseline(args []string) int {
+	fs := flag.NewFlagSet("baseline", flag.ContinueOnError)
+	noCache := fs.Bool("no-cache", false, "disable the incremental cache")
+	if parseErr := fs.Parse(args); parseErr != nil {
+		return 2
+	}
+	patterns := fs.Args()
+	if len(patterns) == 0 {
+		patterns = []string{"./..."}
+	}
+
+	root, rootErr := baseline.ModuleRoot()
+	if rootErr != nil {
+		fmt.Fprintln(os.Stderr, "gox baseline:", rootErr)
+		return 2
+	}
+
+	issues, _, _, runErr := runAnalyzers(patterns, *noCache)
+	if runErr != nil {
+		fmt.Fprintln(os.Stderr, "gox baseline:", runErr)
+		return 2
+	}
+
+	bf, buildErr := baseline.Build(issues, root, cache.AnalyzersVersion(analyzer.All()))
+	if buildErr != nil {
+		fmt.Fprintln(os.Stderr, "gox baseline:", buildErr)
+		return 2
+	}
+	path := filepath.Join(root, baseline.Filename)
+	if saveErr := baseline.Save(path, bf); saveErr != nil {
+		fmt.Fprintln(os.Stderr, "gox baseline:", saveErr)
+		return 2
+	}
+	fmt.Printf("captured %d issue(s) into %s\n", bf.IssueCount, path)
+	fmt.Println("from now on, `gox check` will report only NEW issues.")
+	fmt.Println("commit the file so the rest of the team gets the same view.")
 	return 0
 }
 
