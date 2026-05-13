@@ -8,6 +8,14 @@ Strict static analyzer for Go. Zero external dependencies — every rule is
 implemented from scratch on top of `go/ast`, `go/types`, and the `go list`
 command.
 
+![demo](demo/demo.gif)
+
+The bug above (`transfer("o-42", "u-7")` with parameters declared as
+`userID, orderID string`) compiles, passes every test, and ships to
+production. No major Go linter today catches this class. `gox` does, by
+demanding inline `/* paramName */` comments at the call site whenever
+two adjacent arguments share a type.
+
 The goal: catch the classes of bugs an LLM writing Go without supervision is
 most likely to introduce. Be loud, be opinionated, fail closed.
 
@@ -103,6 +111,48 @@ Files marked with the standard Go marker
 `// Code generated <generator> DO NOT EDIT.` near the top are skipped
 automatically. This covers `protoc-gen-go`, `yo`, `mockgen`, and most
 common generators.
+
+## How is this different from staticcheck / golangci-lint / revive?
+
+Short answer: every existing Go linter is a **detector**. gox is a **gate**.
+
+The existing tools surface warnings and let humans decide. That works when
+the human is the one writing the code. When an LLM is writing the code at
+the speed of a few tokens per second and no one is reviewing line-by-line,
+"surface a warning" is the wrong default — the warning will be ignored
+unless something downstream refuses to proceed.
+
+Concrete differences:
+
+| | gox | golangci-lint / staticcheck / revive |
+|---|---|---|
+| **Default severity** | every rule is an error | most rules are warnings |
+| **Opt-out** | one annotation with a written reason on the same line | regex/path config files |
+| **Dependencies** | none — only Go stdlib + `go list` | hundreds of transitive deps via `golang.org/x/tools` |
+| **Audience** | code written by LLM agents (Claude Code, Cursor, etc.) | humans, optionally CI |
+| **Coverage** | 11 rules, picked for high signal in unsupervised codegen | hundreds of rules; you pick the subset |
+| **Ergonomics** | `gox install claude` wires it into the LLM's tool loop | manual config + `pre-commit` / CI plumbing |
+
+The bug that motivated gox is the swap-prone call site:
+
+```go
+transfer(orderID, userID)   // vs transfer(userID, orderID)
+```
+
+Both compile. Both pass tests. The wrong one ships and corrupts the
+ledger. No major linter catches this today; gox's `namedargs` rule forces
+inline `/* paramName */` comments on adjacent same-type arguments at the
+call site, which:
+- catches the bug,
+- documents the call site,
+- and the LLM annotating its own code is essentially free.
+
+That trade — "more typing at the call site, near-zero bugs of this class"
+— only makes sense when typing is cheap, which is now.
+
+If you already love golangci-lint, keep it. gox is meant to live alongside
+it, not replace it: golangci-lint is the spell-checker, gox is the
+production gate.
 
 ## Design notes
 

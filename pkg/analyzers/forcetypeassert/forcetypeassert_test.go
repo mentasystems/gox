@@ -1,0 +1,57 @@
+package forcetypeassert_test
+
+import (
+	"testing"
+
+	"github.com/mentasystems/gox/pkg/analyzer"
+	"github.com/mentasystems/gox/pkg/analyzer/analyzertest"
+)
+
+func TestForcetypeassert_panicking(t *testing.T) {
+	const src = `package p
+func _(v any) string {
+	return v.(string)
+}`
+	issues := analyzertest.Run(t, get(), src)
+	analyzertest.AssertLines(t, issues, []int{3})
+}
+
+func TestForcetypeassert_commaOkIsFine(t *testing.T) {
+	const src = `package p
+func _(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}`
+	analyzertest.AssertNone(t, analyzertest.Run(t, get(), src))
+}
+
+func TestForcetypeassert_typeSwitchIsFine(t *testing.T) {
+	const src = `package p
+func _(v any) string {
+	switch x := v.(type) {
+	case string:
+		return x
+	}
+	return ""
+}`
+	analyzertest.AssertNone(t, analyzertest.Run(t, get(), src))
+}
+
+func TestForcetypeassert_safeIgnore(t *testing.T) {
+	const src = `package p
+func _(v any) string {
+	return v.(string) // safe-ignore: caller guarantees type
+}`
+	analyzertest.AssertNone(t, analyzertest.Run(t, get(), src))
+}
+
+func get() *analyzer.Analyzer {
+	for _, a := range analyzer.All() {
+		if a.Name == "forcetypeassert" {
+			return a
+		}
+	}
+	panic("forcetypeassert analyzer not registered")
+}
