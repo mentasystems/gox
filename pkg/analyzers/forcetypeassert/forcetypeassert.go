@@ -15,7 +15,7 @@ import (
 	"go/ast"
 	"go/token"
 
-	"github.com/kidandcat/gox/pkg/analyzer"
+	"github.com/mentasystems/gox/pkg/analyzer"
 )
 
 func init() {

@@ -19,7 +19,7 @@ import (
 	"go/types"
 	"strings"
 
-	"github.com/kidandcat/gox/pkg/analyzer"
+	"github.com/mentasystems/gox/pkg/analyzer"
 )
 
 const annGoroutineOK = "goroutine-ok:"
