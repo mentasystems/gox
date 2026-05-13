@@ -12,3 +12,6 @@
 
 # go cache (just in case)
 /.cache/
+
+# release build artefacts
+/dist/
