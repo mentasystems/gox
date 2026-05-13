@@ -57,28 +57,27 @@ after the colon — empty reasons are ignored.
 
 ## Claude Code integration
 
-Add a PostToolUse hook to `~/.claude/settings.json` that runs `gox check` on
-every Go file edit. Claude will see the analyzer output as a tool-result
-error and iterate until the file passes.
-
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if [[ \"$CLAUDE_TOOL_INPUT_FILE_PATH\" == *.go ]]; then cd \"$(dirname \"$CLAUDE_TOOL_INPUT_FILE_PATH\")\" && gox check ./... 2>&1 | head -40; fi",
-            "timeout": 30
-          }
-        ]
-      }
-    ]
-  }
-}
+```sh
+gox install claude
 ```
+
+Writes `~/.claude/gox-hook.sh` and registers it as a `PostToolUse` hook in
+`~/.claude/settings.json` (matcher `Edit|Write|MultiEdit`, timeout 30s).
+Idempotent — running it again just refreshes the script. Preserves every
+other key in `settings.json`.
+
+Whenever Claude edits a `.go` file, the hook runs `gox check .` in the
+file's directory. If issues are found, the hook returns a `decision:block`
+JSON blob with the full output, which Claude sees on its next turn and
+must fix or annotate before continuing.
+
+Claude Code only re-reads `settings.json` when the `/hooks` menu is opened
+or the app is restarted, so the hook activates in a new session (or after
+opening `/hooks` once in the current one).
+
+The hook resolves `gox` via `$GOX_BIN` if set, otherwise `~/go/bin/gox`.
+Run `go install github.com/mentasystems/gox/cmd/gox@latest` to make sure
+it's present.
 
 ## Performance
 

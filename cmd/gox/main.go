@@ -53,6 +53,8 @@ func main() {
 			os.Exit(code)
 		}
 		os.Exit(runGo("test", args))
+	case "install":
+		os.Exit(runInstall(args))
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -71,6 +73,7 @@ Usage:
   gox list                  list registered analyzers
   gox build [args...]       run check, then go build
   gox test  [args...]       run check, then go test
+  gox install claude        install PostToolUse hook into ~/.claude/settings.json
 
 check flags:
   --no-cache                disable the incremental cache
