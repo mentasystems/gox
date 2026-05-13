@@ -15,7 +15,7 @@ most likely to introduce. Be loud, be opinionated, fail closed.
 ## Install
 
 ```sh
-go install github.com/kidandcat/gox/cmd/gox@latest
+go install github.com/mentasystems/gox/cmd/gox@latest
 ```
 
 ## Use
