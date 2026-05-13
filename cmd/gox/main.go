@@ -9,6 +9,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -26,6 +27,7 @@ import (
 	_ "github.com/mentasystems/gox/pkg/analyzers/bodyclose"
 	_ "github.com/mentasystems/gox/pkg/analyzers/contextcheck"
 	_ "github.com/mentasystems/gox/pkg/analyzers/errcheck"
+	_ "github.com/mentasystems/gox/pkg/analyzers/errorlint"
 	_ "github.com/mentasystems/gox/pkg/analyzers/exhaustive"
 	_ "github.com/mentasystems/gox/pkg/analyzers/forcetypeassert"
 	_ "github.com/mentasystems/gox/pkg/analyzers/goroutine"
@@ -232,7 +234,8 @@ func runGo(sub string, args []string) int {
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	if runErr := cmd.Run(); runErr != nil {
-		if ee, ok := runErr.(*exec.ExitError); ok {
+		var ee *exec.ExitError
+		if errors.As(runErr, &ee) {
 			return ee.ExitCode()
 		}
 		fmt.Fprintln(os.Stderr, "gox:", runErr)

@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: build
+        run: go build ./...
+
+      - name: gox check (self-dogfood)
+        run: go run ./cmd/gox check ./...
+
+      - name: test
+        run: go test ./...

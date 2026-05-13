@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 )
 
@@ -122,4 +123,33 @@ func spawnsBareGoroutine() {
 
 func spawnsOKGoroutine() {
 	go fmt.Println("hi") // goroutine-ok: deliberate fire-and-forget
+}
+
+type customErr struct{}
+
+func (customErr) Error() string { return "x" }
+
+func errCompareSentinel(err error) bool {
+	return err == io.EOF // expect: errorlint (use errors.Is)
+}
+
+func errCompareSentinelOK(err error) bool {
+	return err == io.EOF // safe-ignore: io.EOF documented never to be wrapped
+}
+
+func errCompareNilOK(err error) bool {
+	return err == nil // not an issue (nil literal exempted)
+}
+
+func errAssertBad(err error) string {
+	e := err.(customErr) // expect: errorlint (use errors.As)
+	return e.Error()
+}
+
+func errorfBadVerb(err error) error {
+	return fmt.Errorf("oh no: %v", err) // expect: errorlint (use %w)
+}
+
+func errorfGood(err error) error {
+	return fmt.Errorf("oh no: %w", err) // ok
 }
