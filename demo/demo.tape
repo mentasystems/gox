@@ -22,6 +22,7 @@ Set BorderRadius 8
 
 # Land in the demo project.
 Hide
+Type "alias cat='bat --theme=GitHub --style=plain --color=always --paging=never'" Enter
 Type "cd example && clear" Enter
 Sleep 400ms
 Show
