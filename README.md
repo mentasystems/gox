@@ -111,6 +111,15 @@ The cache is per-package, keyed by file mtime+size and the analyzer set
 hash. It lives under `$XDG_CACHE_HOME/gox/v2` (or `~/.cache/gox/v2`).
 Pass `--no-cache` to disable.
 
+## Output cap
+
+`gox check` prints at most 100 issues by default, then a one-line summary of
+how many were hidden. This keeps the output bounded for context-limited
+consumers — notably the Claude Code Stop hook, which pipes `gox check`
+straight back into the model. Raise or lift the cap with `--max-issues=N`
+(`0` = unlimited) or the `GOX_MAX_ISSUES` env var. Issues are sorted by
+`file:line`, so the truncation is deterministic.
+
 ## Generated code
 
 Files marked with the standard Go marker

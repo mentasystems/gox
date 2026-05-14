@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/mentasystems/gox/pkg/analyzer"
@@ -87,6 +88,8 @@ check flags:
   --no-cache                disable the incremental cache
   --no-baseline             ignore .gox-baseline.json; report all issues
   --stats                   print cache hit/miss counts and elapsed time
+  --max-issues N            cap printed issues (default 100, 0 = unlimited;
+                            env: GOX_MAX_ISSUES)
 `)
 }
 
@@ -101,6 +104,7 @@ func runCheck(args []string) int {
 	noCache := fs.Bool("no-cache", false, "disable the incremental cache")
 	noBaseline := fs.Bool("no-baseline", false, "ignore .gox-baseline.json; report all issues")
 	stats := fs.Bool("stats", false, "print cache hit/miss counts and elapsed time")
+	maxIssues := fs.Int("max-issues", defaultMaxIssues(), "cap printed issues; 0 = unlimited (env: GOX_MAX_ISSUES)")
 	if parseErr := fs.Parse(args); parseErr != nil {
 		return 2
 	}
@@ -119,11 +123,25 @@ func runCheck(args []string) int {
 		issues, baselinedCount = applyBaseline(issues)
 	}
 
-	for _, is := range issues {
+	// Cap the printed issues so a package with hundreds of findings does not
+	// flood a consumer's context (the Claude Stop hook pipes this straight
+	// back to the model). Issues are already sorted by file:line, so the
+	// truncation is deterministic. 0 = unlimited.
+	shown := issues
+	hidden := 0
+	if *maxIssues > 0 && len(issues) > *maxIssues {
+		shown = issues[:*maxIssues]
+		hidden = len(issues) - *maxIssues
+	}
+	for _, is := range shown {
 		fmt.Printf("%s:%d:%d: %s: %s\n", is.Pos.Filename, is.Pos.Line, is.Pos.Column, is.Analyzer, is.Message)
 		if is.Hint != "" {
 			fmt.Printf("    hint: %s\n", is.Hint)
 		}
+	}
+	if hidden > 0 {
+		fmt.Printf("... %d more issue(s) hidden (showing %d of %d; raise with --max-issues=N or GOX_MAX_ISSUES, 0 = all)\n",
+			hidden, len(shown), len(issues))
 	}
 	if *stats {
 		fmt.Fprintf(os.Stderr, "gox: %d packages (hits=%d misses=%d) in %s\n",
@@ -137,6 +155,22 @@ func runCheck(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// defaultMaxIssuesValue is the cap applied to printed issues when neither
+// --max-issues nor GOX_MAX_ISSUES is set. Each issue prints 1–2 lines, so
+// 100 keeps the output comfortably small for context-limited consumers.
+const defaultMaxIssuesValue = 100
+
+// defaultMaxIssues resolves the default for --max-issues: GOX_MAX_ISSUES if
+// it holds a valid non-negative integer, otherwise defaultMaxIssuesValue.
+func defaultMaxIssues() int {
+	if v := os.Getenv("GOX_MAX_ISSUES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			return n
+		}
+	}
+	return defaultMaxIssuesValue
 }
 
 // runAnalyzers wires the cache and runs the analyzers — shared by `check`
