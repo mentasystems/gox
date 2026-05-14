@@ -73,15 +73,21 @@ after the colon — empty reasons are ignored.
 gox install claude
 ```
 
-Writes `~/.claude/gox-hook.sh` and registers it as a `PostToolUse` hook in
-`~/.claude/settings.json` (matcher `Edit|Write|MultiEdit`, timeout 30s).
-Idempotent — running it again just refreshes the script. Preserves every
-other key in `settings.json`.
+Writes `~/.claude/gox-hook.sh` and registers it as a `Stop` hook in
+`~/.claude/settings.json` (timeout 30s). Idempotent — running it again just
+refreshes the script. Preserves every other key in `settings.json`. If an
+older gox install registered a `PostToolUse` hook, this command migrates it
+away automatically.
 
-Whenever Claude edits a `.go` file, the hook runs `gox check .` in the
-file's directory. If issues are found, the hook returns a `decision:block`
-JSON blob with the full output, which Claude sees on its next turn and
-must fix or annotate before continuing.
+When Claude finishes a turn, the hook looks at the `.go` files changed in
+the current git repo (unstaged, staged, and untracked) and runs `gox check`
+once per affected package. If issues are found, the hook returns a
+`decision:block` JSON blob with the full output, which Claude sees on its
+next turn and must fix or annotate before continuing.
+
+It runs once per turn rather than on every edit — earlier versions used a
+`PostToolUse` hook that fired on each `Edit`/`Write`, which was noticeably
+slow on large packages.
 
 Claude Code only re-reads `settings.json` when the `/hooks` menu is opened
 or the app is restarted, so the hook activates in a new session (or after
