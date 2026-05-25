@@ -43,6 +43,7 @@ const (
 	AnnGlobalOK   = "global-ok:"
 	AnnAnyOK      = "any-ok:"
 	AnnPanicOK    = "panic-ok:"
+	AnnTimeoutOK  = "timeout-ok:"
 )
 
 // HasAnnotation reports whether a line comment group contains the given prefix

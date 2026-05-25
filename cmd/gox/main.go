@@ -32,6 +32,7 @@ import (
 	_ "github.com/mentasystems/gox/pkg/analyzers/exhaustive"
 	_ "github.com/mentasystems/gox/pkg/analyzers/forcetypeassert"
 	_ "github.com/mentasystems/gox/pkg/analyzers/goroutine"
+	_ "github.com/mentasystems/gox/pkg/analyzers/httptimeout"
 	_ "github.com/mentasystems/gox/pkg/analyzers/namedargs"
 	_ "github.com/mentasystems/gox/pkg/analyzers/noglobals"
 	_ "github.com/mentasystems/gox/pkg/analyzers/shadow"

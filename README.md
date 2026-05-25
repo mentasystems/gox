@@ -53,6 +53,8 @@ gox test  [args]   # gox check && go test
 | `bodyclose` | `*http.Response.Body` left unclosed |
 | `contextcheck` | `context.Background()`/`TODO()` inside a function that already receives a `context.Context` |
 | `goroutine` | `go f()` without a visible `*errgroup.Group`, `sync.WaitGroup`, or `context.CancelFunc` |
+| `errorlint` | `==` / type-assert / `%s` on errors instead of `errors.Is` / `errors.As` / `%w` |
+| `httptimeout` | HTTP shortcut calls or `http.Client` literals with no `Timeout` set |
 
 ## Annotations
 
@@ -66,6 +68,7 @@ after the colon — empty reasons are ignored.
 | `// any-ok: <why>` | Allow `any` / `interface{}` (`banany`) |
 | `// goroutine-ok: <why>` | Allow a fire-and-forget `go` statement (`goroutine`) |
 | `// exhaustive-ok: <why>` | Accept a `default:` case as covering missing variants (`exhaustive`) |
+| `// timeout-ok: <why>` | Allow an HTTP call or `http.Client` literal without a `Timeout` (`httptimeout`) |
 
 ## Claude Code integration
 
@@ -145,7 +148,7 @@ Concrete differences:
 | **Opt-out** | one annotation with a written reason on the same line | regex/path config files |
 | **Dependencies** | none — only Go stdlib + `go list` | hundreds of transitive deps via `golang.org/x/tools` |
 | **Audience** | code written by LLM agents (Claude Code, Cursor, etc.) | humans, optionally CI |
-| **Coverage** | 11 rules, picked for high signal in unsupervised codegen | hundreds of rules; you pick the subset |
+| **Coverage** | 12 rules, picked for high signal in unsupervised codegen | hundreds of rules; you pick the subset |
 | **Ergonomics** | `gox install claude` wires it into the LLM's tool loop | manual config + `pre-commit` / CI plumbing |
 
 The bug that motivated gox is the swap-prone call site:
