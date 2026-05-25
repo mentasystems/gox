@@ -12,17 +12,22 @@
 package bodyclose
 
 import (
+	_ "embed"
 	"go/ast"
 	"go/types"
 
 	"github.com/mentasystems/gox/pkg/analyzer"
 )
 
+//go:embed bodyclose.md
+var explanation string // global-ok: populated at compile time by //go:embed, never mutated
+
 func init() {
 	analyzer.Register(&analyzer.Analyzer{
-		Name: "bodyclose",
-		Doc:  "reports *http.Response values whose Body is never closed",
-		Run:  run,
+		Name:        "bodyclose",
+		Doc:         "reports *http.Response values whose Body is never closed",
+		Explanation: explanation,
+		Run:         run,
 	})
 }
 

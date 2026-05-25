@@ -21,6 +21,7 @@
 package namedargs
 
 import (
+	_ "embed"
 	"fmt"
 	"go/ast"
 	"go/token"
@@ -30,11 +31,15 @@ import (
 	"github.com/mentasystems/gox/pkg/analyzer"
 )
 
+//go:embed namedargs.md
+var explanation string // global-ok: populated at compile time by //go:embed, never mutated
+
 func init() {
 	analyzer.Register(&analyzer.Analyzer{
-		Name: "namedargs",
-		Doc:  "requires inline `/* paramName */` comments when consecutive params share a type",
-		Run:  run,
+		Name:        "namedargs",
+		Doc:         "requires inline `/* paramName */` comments when consecutive params share a type",
+		Explanation: explanation,
+		Run:         run,
 	})
 }
 

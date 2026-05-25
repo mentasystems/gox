@@ -10,6 +10,7 @@
 package noglobals
 
 import (
+	_ "embed"
 	"fmt"
 	"go/ast"
 	"go/token"
@@ -18,11 +19,15 @@ import (
 	"github.com/mentasystems/gox/pkg/analyzer"
 )
 
+//go:embed noglobals.md
+var explanation string // global-ok: populated at compile time by //go:embed, never mutated
+
 func init() {
 	analyzer.Register(&analyzer.Analyzer{
-		Name: "noglobals",
-		Doc:  "forbids mutable package-level var declarations without justification",
-		Run:  run,
+		Name:        "noglobals",
+		Doc:         "forbids mutable package-level var declarations without justification",
+		Explanation: explanation,
+		Run:         run,
 	})
 }
 

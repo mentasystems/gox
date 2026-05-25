@@ -12,17 +12,22 @@
 package forcetypeassert
 
 import (
+	_ "embed"
 	"go/ast"
 	"go/token"
 
 	"github.com/mentasystems/gox/pkg/analyzer"
 )
 
+//go:embed forcetypeassert.md
+var explanation string // global-ok: populated at compile time by //go:embed, never mutated
+
 func init() {
 	analyzer.Register(&analyzer.Analyzer{
-		Name: "forcetypeassert",
-		Doc:  "forbids type assertions without the comma-ok form",
-		Run:  run,
+		Name:        "forcetypeassert",
+		Doc:         "forbids type assertions without the comma-ok form",
+		Explanation: explanation,
+		Run:         run,
 	})
 }
 

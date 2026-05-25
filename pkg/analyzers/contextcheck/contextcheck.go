@@ -12,17 +12,22 @@
 package contextcheck
 
 import (
+	_ "embed"
 	"go/ast"
 	"go/types"
 
 	"github.com/mentasystems/gox/pkg/analyzer"
 )
 
+//go:embed contextcheck.md
+var explanation string // global-ok: populated at compile time by //go:embed, never mutated
+
 func init() {
 	analyzer.Register(&analyzer.Analyzer{
-		Name: "contextcheck",
-		Doc:  "context.Context must propagate from a function's parameter, not be re-created",
-		Run:  run,
+		Name:        "contextcheck",
+		Doc:         "context.Context must propagate from a function's parameter, not be re-created",
+		Explanation: explanation,
+		Run:         run,
 	})
 }
 

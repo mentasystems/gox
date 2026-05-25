@@ -20,6 +20,7 @@
 package errorlint
 
 import (
+	_ "embed"
 	"fmt"
 	"go/ast"
 	"go/token"
@@ -28,11 +29,15 @@ import (
 	"github.com/mentasystems/gox/pkg/analyzer"
 )
 
+//go:embed errorlint.md
+var explanation string // global-ok: populated at compile time by //go:embed, never mutated
+
 func init() {
 	analyzer.Register(&analyzer.Analyzer{
-		Name: "errorlint",
-		Doc:  "errors.Is/errors.As/%w instead of ==/type-assert/%s on errors",
-		Run:  run,
+		Name:        "errorlint",
+		Doc:         "errors.Is/errors.As/%w instead of ==/type-assert/%s on errors",
+		Explanation: explanation,
+		Run:         run,
 	})
 }
 
@@ -236,7 +241,7 @@ func isFlag(c byte) bool {
 func isDigit(c byte) bool { return c >= '0' && c <= '9' }
 
 // unquoteString removes the surrounding quotes of a string literal token.
-// Returns (value, true) for `"..."` and ``...``; (..., false) otherwise.
+// Returns (value, true) for `"..."` and “...“; (..., false) otherwise.
 func unquoteString(lit string) (string, bool) {
 	if len(lit) < 2 {
 		return "", false

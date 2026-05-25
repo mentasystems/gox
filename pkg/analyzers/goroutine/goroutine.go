@@ -14,6 +14,7 @@
 package goroutine
 
 import (
+	_ "embed"
 	"go/ast"
 	"go/token"
 	"go/types"
@@ -24,11 +25,15 @@ import (
 
 const annGoroutineOK = "goroutine-ok:"
 
+//go:embed goroutine.md
+var explanation string // global-ok: populated at compile time by //go:embed, never mutated
+
 func init() {
 	analyzer.Register(&analyzer.Analyzer{
-		Name: "goroutine",
-		Doc:  "goroutines must run in a scope with a visible lifecycle primitive",
-		Run:  run,
+		Name:        "goroutine",
+		Doc:         "goroutines must run in a scope with a visible lifecycle primitive",
+		Explanation: explanation,
+		Run:         run,
 	})
 }
 

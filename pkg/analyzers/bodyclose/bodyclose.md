@@ -1,0 +1,40 @@
+# bodyclose
+
+Reports `*http.Response` values whose `Body` is never closed.
+
+## What it catches
+
+`http.Get`/`Do` return a response whose `Body` MUST be closed even on errors —
+otherwise the underlying connection is held forever, leaking file descriptors
+and TIME_WAIT sockets. LLMs frequently forget the `defer resp.Body.Close()` line.
+
+## Bad
+
+```go
+resp, _ := client.Do(req)
+io.Copy(io.Discard, resp.Body)
+// leak: Body never closed
+```
+
+## Good
+
+```go
+resp, err := client.Do(req)
+if err != nil { return err }
+defer resp.Body.Close()
+io.Copy(io.Discard, resp.Body)
+```
+
+## Opt-out
+
+`// safe-ignore: <reason>` on the line of the assignment.
+
+```go
+resp, _ := client.Do(req) // safe-ignore: probe — body content discarded by transport
+```
+
+## Limitations
+
+- Heuristic, not sound. The analyzer requires `X.Body.Close()` to appear
+  textually somewhere in the same enclosing block. If the response escapes
+  through a struct field or another function call, the rule won't notice.

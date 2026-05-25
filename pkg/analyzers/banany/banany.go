@@ -11,6 +11,7 @@
 package banany
 
 import (
+	_ "embed"
 	"go/ast"
 	"go/token"
 	"strings"
@@ -18,11 +19,15 @@ import (
 	"github.com/mentasystems/gox/pkg/analyzer"
 )
 
+//go:embed banany.md
+var explanation string // global-ok: populated at compile time by //go:embed, never mutated
+
 func init() {
 	analyzer.Register(&analyzer.Analyzer{
-		Name: "banany",
-		Doc:  "forbids `any` / `interface{}` without an // any-ok: justification",
-		Run:  run,
+		Name:        "banany",
+		Doc:         "forbids `any` / `interface{}` without an // any-ok: justification",
+		Explanation: explanation,
+		Run:         run,
 	})
 }
 

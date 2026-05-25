@@ -33,10 +33,11 @@ go install github.com/mentasystems/gox/cmd/gox@latest
 ## Use
 
 ```sh
-gox check ./...    # analyze; exit 1 on any issue
-gox list           # list registered analyzers
-gox build [args]   # gox check && go build
-gox test  [args]   # gox check && go test
+gox check ./...        # analyze; exit 1 on any issue
+gox list               # list registered analyzers
+gox explain <rule>     # print the rule's reference markdown
+gox build [args]       # gox check && go build
+gox test  [args]       # gox check && go test
 ```
 
 ## Rules
@@ -69,6 +70,28 @@ after the colon — empty reasons are ignored.
 | `// goroutine-ok: <why>` | Allow a fire-and-forget `go` statement (`goroutine`) |
 | `// exhaustive-ok: <why>` | Accept a `default:` case as covering missing variants (`exhaustive`) |
 | `// timeout-ok: <why>` | Allow an HTTP call or `http.Client` literal without a `Timeout` (`httptimeout`) |
+
+## Rule reference
+
+The compiled `gox` binary ships every rule's reference page embedded as
+markdown. Print one to stdout:
+
+```sh
+gox explain bodyclose
+```
+
+The same content is available as a JSON envelope for agent consumption:
+
+```sh
+gox explain bodyclose --json
+# { "rule": "bodyclose", "doc": "...", "explanation": "..." }
+```
+
+Each reference page covers what the rule catches, a bad / good example, the
+opt-out syntax, and the analyzer's known limitations. The reference is
+version-pinned to the binary you have installed — when a rule grows a new
+edge case, `gox explain` reflects it without depending on an external docs
+site.
 
 ## Claude Code integration
 

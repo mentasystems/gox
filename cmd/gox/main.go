@@ -4,11 +4,13 @@
 //
 //	gox check [flags] [packages...]   # run all analyzers, exit 1 on any issue
 //	gox list                          # list registered analyzers
+//	gox explain <rule>                # print the rule's reference markdown
 //	gox build [args...]               # gox check && go build
 //	gox test  [args...]               # gox check && go test
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -49,6 +51,8 @@ func main() {
 		os.Exit(runCheck(args))
 	case "list":
 		runList()
+	case "explain":
+		os.Exit(runExplain(args))
 	case "build":
 		if code := runCheck(nil); code != 0 {
 			os.Exit(code)
@@ -79,6 +83,7 @@ Usage:
   gox check [flags] [packages...]
                             run all analyzers; exit 1 on any issue
   gox list                  list registered analyzers
+  gox explain <rule>        print the rule's reference markdown (use --json for envelope)
   gox build [args...]       run check, then go build
   gox test  [args...]       run check, then go test
   gox baseline              capture current issues into .gox-baseline.json
@@ -277,4 +282,71 @@ func runGo(sub string, args []string) int {
 		return 2
 	}
 	return 0
+}
+
+func runExplain(args []string) int {
+	// Parse args manually so the --json flag can appear either before or after
+	// the rule name (the stdlib flag package stops at the first non-flag arg).
+	asJSON := false
+	var rest []string
+	for _, a := range args {
+		switch a {
+		case "--json", "-json":
+			asJSON = true
+		case "-h", "--help":
+			fmt.Fprintln(os.Stderr, "usage: gox explain [--json] <rule>")
+			return 0
+		default:
+			if len(a) > 0 && a[0] == '-' {
+				fmt.Fprintf(os.Stderr, "gox explain: unknown flag %q\n", a)
+				return 2
+			}
+			rest = append(rest, a)
+		}
+	}
+	switch len(rest) {
+	case 0:
+		fmt.Fprintln(os.Stderr, "gox explain: missing rule name")
+		fmt.Fprintln(os.Stderr, "usage: gox explain <rule>")
+		return 2
+	case 1:
+		// fall through
+	default:
+		fmt.Fprintln(os.Stderr, "gox explain: too many arguments; expected one rule name")
+		return 2
+	}
+	name := rest[0]
+	for _, a := range analyzer.All() {
+		if a.Name != name {
+			continue
+		}
+		if asJSON {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetEscapeHTML(false)
+			if encErr := enc.Encode(map[string]string{
+				"rule":        a.Name,
+				"doc":         a.Doc,
+				"explanation": a.Explanation,
+			}); encErr != nil {
+				fmt.Fprintln(os.Stderr, "gox explain:", encErr)
+				return 2
+			}
+			return 0
+		}
+		if a.Explanation == "" {
+			fmt.Fprintf(os.Stderr, "gox explain: %q has no embedded explanation yet\n", name)
+			return 2
+		}
+		fmt.Print(a.Explanation)
+		if a.Explanation[len(a.Explanation)-1] != '\n' {
+			fmt.Println()
+		}
+		return 0
+	}
+	fmt.Fprintf(os.Stderr, "gox explain: unknown rule %q\n", name)
+	fmt.Fprintln(os.Stderr, "available rules:")
+	for _, a := range analyzer.All() {
+		fmt.Fprintf(os.Stderr, "  %s\n", a.Name)
+	}
+	return 2
 }

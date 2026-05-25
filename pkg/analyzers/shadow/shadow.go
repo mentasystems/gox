@@ -9,6 +9,7 @@
 package shadow
 
 import (
+	_ "embed"
 	"fmt"
 	"go/ast"
 	"go/token"
@@ -17,11 +18,15 @@ import (
 	"github.com/mentasystems/gox/pkg/analyzer"
 )
 
+//go:embed shadow.md
+var explanation string // global-ok: populated at compile time by //go:embed, never mutated
+
 func init() {
 	analyzer.Register(&analyzer.Analyzer{
-		Name: "shadow",
-		Doc:  "reports variables that shadow names from an outer scope",
-		Run:  run,
+		Name:        "shadow",
+		Doc:         "reports variables that shadow names from an outer scope",
+		Explanation: explanation,
+		Run:         run,
 	})
 }
 

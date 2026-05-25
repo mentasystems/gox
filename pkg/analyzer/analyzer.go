@@ -31,8 +31,13 @@ type Pass struct {
 // Analyzer is a single rule.
 type Analyzer struct {
 	Name string
-	Doc  string
-	Run  func(*Pass)
+	// Doc is a one-line summary surfaced by `gox list`.
+	Doc string
+	// Explanation is the long-form markdown surfaced by `gox explain <name>`.
+	// Each analyzer embeds its own .md file via //go:embed and assigns it here
+	// at init time. May be empty.
+	Explanation string
+	Run         func(*Pass)
 }
 
 // Annotation prefixes recognised on trailing line comments to opt out of a rule.

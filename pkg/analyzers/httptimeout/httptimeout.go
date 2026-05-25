@@ -25,6 +25,7 @@
 package httptimeout
 
 import (
+	_ "embed"
 	"go/ast"
 	"go/constant"
 	"go/token"
@@ -34,11 +35,15 @@ import (
 	"github.com/mentasystems/gox/pkg/analyzer"
 )
 
+//go:embed httptimeout.md
+var explanation string // global-ok: populated at compile time by //go:embed, never mutated
+
 func init() {
 	analyzer.Register(&analyzer.Analyzer{
-		Name: "httptimeout",
-		Doc:  "HTTP clients and shortcut calls must set an explicit Timeout",
-		Run:  run,
+		Name:        "httptimeout",
+		Doc:         "HTTP clients and shortcut calls must set an explicit Timeout",
+		Explanation: explanation,
+		Run:         run,
 	})
 }
 

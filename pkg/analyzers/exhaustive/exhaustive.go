@@ -14,6 +14,7 @@
 package exhaustive
 
 import (
+	_ "embed"
 	"fmt"
 	"go/ast"
 	"go/token"
@@ -25,11 +26,15 @@ import (
 
 const annExhaustiveOK = "exhaustive-ok:"
 
+//go:embed exhaustive.md
+var explanation string // global-ok: populated at compile time by //go:embed, never mutated
+
 func init() {
 	analyzer.Register(&analyzer.Analyzer{
-		Name: "exhaustive",
-		Doc:  "requires switch exhaustiveness over iota enums and sealed interfaces",
-		Run:  run,
+		Name:        "exhaustive",
+		Doc:         "requires switch exhaustiveness over iota enums and sealed interfaces",
+		Explanation: explanation,
+		Run:         run,
 	})
 }
 

@@ -13,6 +13,7 @@
 package errcheck
 
 import (
+	_ "embed"
 	"fmt"
 	"go/ast"
 	"go/token"
@@ -22,11 +23,15 @@ import (
 	"github.com/mentasystems/gox/pkg/analyzer"
 )
 
+//go:embed errcheck.md
+var explanation string // global-ok: populated at compile time by //go:embed, never mutated
+
 func init() {
 	analyzer.Register(&analyzer.Analyzer{
-		Name: "errcheck",
-		Doc:  "reports calls to error-returning functions whose error is dropped",
-		Run:  run,
+		Name:        "errcheck",
+		Doc:         "reports calls to error-returning functions whose error is dropped",
+		Explanation: explanation,
+		Run:         run,
 	})
 }
 
