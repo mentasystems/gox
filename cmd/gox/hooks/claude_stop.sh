@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Stop hook for Claude Code: when the turn ends, find the .go files that
-# changed (according to git) and run `gox check` once per affected package.
-# If issues are found, return them as a blocking JSON object so the model
-# sees them in its next turn.
+# Stop hook for Claude Code and Grok Build: when the turn ends, find the .go
+# files that changed (according to git) and run `gox check` once per affected
+# package. If issues are found, return them as a blocking JSON object so the
+# model sees them in its next turn (or as a hook annotation in Grok).
 #
 # This used to be a PostToolUse hook (ran on every Edit/Write — too
 # frequent and slow). It now runs once per turn instead.
 #
-# Installed by: gox install claude
-# Schema reference: https://docs.anthropic.com/en/docs/claude-code/hooks
+# Installed by: gox install claude  or  gox install grok
+# Schema reference (Claude): https://docs.anthropic.com/en/docs/claude-code/hooks
+# Grok reads the same Stop hook shape (and also ~/.claude/settings.json for compat).
 
 set -u
 

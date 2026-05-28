@@ -27,16 +27,28 @@ const claudeHookEvent = "Stop"
 // claudeHookTimeout is the per-call timeout (seconds).
 const claudeHookTimeout = 30
 
+// grokHookCommand is the exact "command" string written into the Grok hook
+// entry under ~/.grok/hooks/gox.json.
+const grokHookCommand = "$HOME/.grok/hooks/gox-hook.sh"
+
+// grokHookEvent is the hook event (Stop, same as Claude).
+const grokHookEvent = "Stop"
+
+// grokHookTimeout is the per-call timeout (seconds).
+const grokHookTimeout = 30
+
 func runInstall(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "gox install: target required (currently supported: claude)")
+		fmt.Fprintln(os.Stderr, "gox install: target required (currently supported: claude, grok)")
 		return 2
 	}
 	switch args[0] {
 	case "claude":
 		return installClaude()
+	case "grok":
+		return installGrok()
 	default:
-		fmt.Fprintf(os.Stderr, "gox install: unknown target %q (supported: claude)\n", args[0])
+		fmt.Fprintf(os.Stderr, "gox install: unknown target %q (supported: claude, grok)\n", args[0])
 		return 2
 	}
 }
@@ -81,6 +93,42 @@ func installClaude() int {
 	return 0
 }
 
+func installGrok() int {
+	home, homeErr := os.UserHomeDir()
+	if homeErr != nil {
+		fmt.Fprintln(os.Stderr, "gox install: cannot resolve home dir:", homeErr)
+		return 2
+	}
+	grokHooksDir := filepath.Join(home, ".grok", "hooks")
+	if mkErr := os.MkdirAll(grokHooksDir, 0o755); mkErr != nil {
+		fmt.Fprintln(os.Stderr, "gox install: cannot create ~/.grok/hooks:", mkErr)
+		return 2
+	}
+
+	scriptPath := filepath.Join(grokHooksDir, "gox-hook.sh")
+	if writeErr := os.WriteFile(scriptPath, claudeStopScript, 0o755); writeErr != nil {
+		fmt.Fprintln(os.Stderr, "gox install: cannot write hook script:", writeErr)
+		return 2
+	}
+	fmt.Printf("✓ wrote %s\n", scriptPath)
+
+	hookFile := filepath.Join(grokHooksDir, "gox.json")
+	added, regErr := registerGrokHook(hookFile)
+	if regErr != nil {
+		fmt.Fprintln(os.Stderr, "gox install: cannot update gox.json:", regErr)
+		return 2
+	}
+	if added {
+		fmt.Printf("✓ registered %s hook in %s\n", grokHookEvent, hookFile)
+	} else {
+		fmt.Printf("✓ hook already registered in %s (script refreshed)\n", hookFile)
+	}
+	fmt.Println()
+	fmt.Println("note: Grok re-reads ~/.grok/hooks/*.json on session start and when you press")
+	fmt.Println("      `l` (reload) inside the /hooks modal (Ctrl+L).")
+	return 0
+}
+
 // registerClaudeHook reads settings.json (if it exists), removes any stale
 // gox PostToolUse entry from an older install, inserts or refreshes the gox
 // Stop hook entry, and writes it back. It returns:
@@ -114,7 +162,7 @@ func registerClaudeHook(path string) (added, migrated bool, err error) {
 	if postArr, ok := hooks["PostToolUse"].([]any); ok {
 		kept := make([]any, 0, len(postArr))
 		for _, raw := range postArr {
-			if entryHasGoxCommand(raw) {
+			if entryHasCommand(raw, claudeHookCommand) {
 				migrated = true
 				continue
 			}
@@ -131,7 +179,9 @@ func registerClaudeHook(path string) (added, migrated bool, err error) {
 	stopArr, _ := hooks[claudeHookEvent].([]any)
 
 	// Look for an existing Stop entry with our exact command.
-	alreadyInstalled := slices.ContainsFunc(stopArr, entryHasGoxCommand)
+	alreadyInstalled := slices.ContainsFunc(stopArr, func(raw any) bool { // any-ok: hook entries decoded as untyped JSON.
+		return entryHasCommand(raw, claudeHookCommand)
+	})
 
 	if !alreadyInstalled {
 		newEntry := map[string]any{
@@ -167,10 +217,10 @@ func registerClaudeHook(path string) (added, migrated bool, err error) {
 	return added, migrated, nil
 }
 
-// entryHasGoxCommand reports whether a hooks-array entry (the object that
-// holds an inner "hooks" list) contains a command hook running our gox
-// hook command.
-func entryHasGoxCommand(raw any) bool { // any-ok: settings.json hook entries are decoded as untyped JSON.
+// entryHasCommand reports whether a hooks-array entry (the object that
+// holds an inner "hooks" list) contains a command hook running the given
+// exact command string.
+func entryHasCommand(raw any, want string) bool { // any-ok: hook entries decoded as untyped JSON.
 	entry, ok := raw.(map[string]any)
 	if !ok {
 		return false
@@ -181,9 +231,79 @@ func entryHasGoxCommand(raw any) bool { // any-ok: settings.json hook entries ar
 		if !ok {
 			continue
 		}
-		if h["type"] == "command" && h["command"] == claudeHookCommand {
+		if h["type"] == "command" && h["command"] == want {
 			return true
 		}
 	}
 	return false
+}
+
+// entryHasGoxCommand is a compatibility wrapper (used by older call sites
+// before the two-target refactor). Prefer entryHasCommand directly.
+func entryHasGoxCommand(raw any) bool { // any-ok: hook entries decoded as untyped JSON.
+	return entryHasCommand(raw, claudeHookCommand)
+}
+
+// registerGrokHook reads ~/.grok/hooks/gox.json (if present), ensures a Stop
+// entry for our hook command exists (appending if needed), and writes back
+// preserving any other events or user content in the file. Returns added=true
+// only if we actually appended a new entry.
+func registerGrokHook(path string) (added bool, err error) {
+	content := map[string]any{}
+	data, readErr := os.ReadFile(path)
+	switch {
+	case readErr == nil:
+		if jsonErr := json.Unmarshal(data, &content); jsonErr != nil {
+			return false, fmt.Errorf("parse %s: %w", path, jsonErr)
+		}
+	case os.IsNotExist(readErr):
+		// fresh file — we will create it with just our hook
+	default:
+		return false, fmt.Errorf("read %s: %w", path, readErr)
+	}
+
+	hooks, _ := content["hooks"].(map[string]any)
+	if hooks == nil {
+		hooks = map[string]any{}
+		content["hooks"] = hooks
+	}
+
+	stopArr, _ := hooks[grokHookEvent].([]any)
+
+	alreadyInstalled := slices.ContainsFunc(stopArr, func(raw any) bool { // any-ok: hook entries decoded as untyped JSON.
+		return entryHasCommand(raw, grokHookCommand)
+	})
+
+	if !alreadyInstalled {
+		newEntry := map[string]any{
+			"hooks": []any{
+				map[string]any{
+					"type":    "command",
+					"command": grokHookCommand,
+					"timeout": grokHookTimeout,
+				},
+			},
+		}
+		hooks[grokHookEvent] = append(stopArr, newEntry)
+		added = true
+	}
+
+	if !added {
+		// Nothing changed — leave the file byte-identical if it existed.
+		return false, nil
+	}
+
+	out, marshalErr := json.MarshalIndent(content, "", "  ")
+	if marshalErr != nil {
+		return false, fmt.Errorf("marshal: %w", marshalErr)
+	}
+	out = append(out, '\n')
+	tmp := path + ".tmp"
+	if wErr := os.WriteFile(tmp, out, 0o644); wErr != nil {
+		return false, fmt.Errorf("write tmp: %w", wErr)
+	}
+	if rnErr := os.Rename(tmp, path); rnErr != nil {
+		return false, fmt.Errorf("rename: %w", rnErr)
+	}
+	return true, nil
 }

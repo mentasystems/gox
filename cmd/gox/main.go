@@ -88,7 +88,8 @@ Usage:
   gox test  [args...]       run check, then go test
   gox baseline              capture current issues into .gox-baseline.json
                             at the module root; check filters these out
-  gox install claude        install PostToolUse hook into ~/.claude/settings.json
+  gox install claude        install Stop hook into ~/.claude/settings.json (Claude Code)
+  gox install grok          install Stop hook into ~/.grok/hooks/gox.json (Grok Build)
 
 check flags:
   --no-cache                disable the incremental cache

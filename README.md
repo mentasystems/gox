@@ -19,8 +19,8 @@ two adjacent arguments share a type.
 The goal: catch the classes of bugs an LLM writing Go without supervision is
 most likely to introduce. Be loud, be opinionated, fail closed.
 
-> **Status: experimental.** Built as a tool for using Claude Code (and
-> similar agents) to write Go without leaving silent bugs behind. Used
+> **Status: experimental.** Built as a tool for using Claude Code, Grok Build,
+> and similar agents to write Go without leaving silent bugs behind. Used
 > daily, but the rule set is still evolving — expect breaking changes to
 > annotation syntax until v1.0.
 
@@ -93,35 +93,44 @@ version-pinned to the binary you have installed — when a rule grows a new
 edge case, `gox explain` reflects it without depending on an external docs
 site.
 
-## Claude Code integration
+## Claude Code / Grok Build integration
 
 ```sh
 gox install claude
+gox install grok
 ```
 
-Writes `~/.claude/gox-hook.sh` and registers it as a `Stop` hook in
-`~/.claude/settings.json` (timeout 30s). Idempotent — running it again just
-refreshes the script. Preserves every other key in `settings.json`. If an
-older gox install registered a `PostToolUse` hook, this command migrates it
-away automatically.
+`gox install claude` writes `~/.claude/gox-hook.sh` and registers it as a
+`Stop` hook in `~/.claude/settings.json` (timeout 30s). It is idempotent and
+migrates legacy `PostToolUse` registrations automatically. Preserves every
+other key in the file.
 
-When Claude finishes a turn, the hook looks at the `.go` files changed in
-the current git repo (unstaged, staged, and untracked) and runs `gox check`
+`gox install grok` writes `~/.grok/hooks/gox-hook.sh` and registers the same
+Stop hook in `~/.grok/hooks/gox.json` (native Grok hook file). Multiple
+`*.json` files under `~/.grok/hooks/` are merged; the command only touches
+the Stop array for our entry and leaves other events or user content intact.
+
+When the agent finishes a turn, the hook scans the current git repo for
+changed `.go` files (unstaged, staged, and untracked) and runs `gox check`
 once per affected package. If issues are found, the hook returns a
-`decision:block` JSON blob with the full output, which Claude sees on its
-next turn and must fix or annotate before continuing.
+`{"decision":"block","reason":"..."}` payload. Claude surfaces it on the
+next turn; Grok records it as a hook annotation in the scrollback (and, for
+Stop hooks, the same shape is supported for feeding issues back).
 
-It runs once per turn rather than on every edit — earlier versions used a
-`PostToolUse` hook that fired on each `Edit`/`Write`, which was noticeably
-slow on large packages.
+The hook runs once per turn (on `Stop`) rather than on every edit. Earlier
+versions used `PostToolUse` on each `Edit`/`Write`, which was too slow on
+large packages.
 
-Claude Code only re-reads `settings.json` when the `/hooks` menu is opened
-or the app is restarted, so the hook activates in a new session (or after
-opening `/hooks` once in the current one).
+- Claude Code re-reads `settings.json` when `/hooks` is opened or the app
+  restarts.
+- Grok re-reads `~/.grok/hooks/*.json` at session start and on `l` (reload)
+  inside the hooks modal (Ctrl+L or `/hooks`).
 
 The hook resolves `gox` via `$GOX_BIN` if set, otherwise `~/go/bin/gox`.
-Run `go install github.com/mentasystems/gox/cmd/gox@latest` to make sure
-it's present.
+Run `go install github.com/mentasystems/gox/cmd/gox@latest` to ensure it is
+present. Because Grok also reads `~/.claude/settings.json` for compatibility,
+`gox install claude` works for Grok users too; the native `grok` target is
+recommended when you only use Grok Build.
 
 ## Performance
 
@@ -172,7 +181,7 @@ Concrete differences:
 | **Dependencies** | none — only Go stdlib + `go list` | hundreds of transitive deps via `golang.org/x/tools` |
 | **Audience** | code written by LLM agents (Claude Code, Cursor, etc.) | humans, optionally CI |
 | **Coverage** | 12 rules, picked for high signal in unsupervised codegen | hundreds of rules; you pick the subset |
-| **Ergonomics** | `gox install claude` wires it into the LLM's tool loop | manual config + `pre-commit` / CI plumbing |
+| **Ergonomics** | `gox install claude` / `gox install grok` wires it into the LLM's tool loop | manual config + `pre-commit` / CI plumbing |
 
 The bug that motivated gox is the swap-prone call site:
 
