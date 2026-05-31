@@ -15,6 +15,7 @@ import (
 	"go/token"
 	"go/types"
 
+	"github.com/mentasystems/gox/internal/astutil"
 	"github.com/mentasystems/gox/pkg/analyzer"
 )
 
@@ -62,6 +63,10 @@ func run(pass *analyzer.Pass) {
 					continue
 				}
 				if outerObj := lookupVarOrParam(outer, id.Name, id.Pos()); outerObj != nil {
+					// Respect an explicit opt-out on the declaration line.
+					if hasSafeIgnore(pass, file, id.Pos()) {
+						continue
+					}
 					pass.Report(analyzer.Issue{
 						Analyzer: "shadow",
 						Pos:      pass.Fset.Position(id.Pos()),
@@ -73,6 +78,19 @@ func run(pass *analyzer.Pass) {
 			return true
 		})
 	}
+}
+
+// hasSafeIgnore reports whether the source line containing `pos` carries a
+// `// safe-ignore: <reason>` annotation. shadow reports at the identifier
+// column (which may sit in the middle of a line, e.g. inside an `if`-init
+// clause), so a line-based lookup is used rather than a strict trailing one.
+func hasSafeIgnore(pass *analyzer.Pass, file *ast.File, pos token.Pos) bool {
+	for _, cg := range astutil.LineComments(pass.Fset, file, pos) {
+		if analyzer.HasAnnotation(cg, analyzer.AnnSafeIgnore) {
+			return true
+		}
+	}
+	return false
 }
 
 // lookupVarOrParam walks scopes outward looking for a *types.Var (variable or

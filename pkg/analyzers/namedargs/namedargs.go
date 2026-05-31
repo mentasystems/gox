@@ -28,6 +28,7 @@ import (
 	"go/types"
 	"strings"
 
+	"github.com/mentasystems/gox/internal/astutil"
 	"github.com/mentasystems/gox/pkg/analyzer"
 )
 
@@ -102,6 +103,13 @@ func checkCall(pass *analyzer.Pass, file *ast.File, call *ast.CallExpr) {
 		return
 	}
 
+	// Respect an explicit opt-out. The annotation may live on the line where
+	// the call opens (call.Pos) or where it closes (call.End) — multi-line
+	// calls commonly carry it on the closing-paren line.
+	if hasSafeIgnore(pass, file, call.Pos()) || hasSafeIgnore(pass, file, call.End()) {
+		return
+	}
+
 	// Match arguments to parameters (variadic flattens the tail).
 	for i, arg := range call.Args {
 		if i >= params.Len() {
@@ -120,6 +128,11 @@ func checkCall(pass *analyzer.Pass, file *ast.File, call *ast.CallExpr) {
 		if got == wantedName {
 			continue
 		}
+		// Per-argument opt-out (for multi-line calls where the annotation sits
+		// on a specific argument's line).
+		if hasSafeIgnore(pass, file, arg.Pos()) {
+			continue
+		}
 		pass.Report(analyzer.Issue{
 			Analyzer: "namedargs",
 			Pos:      pass.Fset.Position(arg.Pos()),
@@ -127,6 +140,19 @@ func checkCall(pass *analyzer.Pass, file *ast.File, call *ast.CallExpr) {
 			Hint:     fmt.Sprintf("change to: /* %s */ %s", wantedName, exprSrc(pass.Fset, arg)),
 		})
 	}
+}
+
+// hasSafeIgnore reports whether the source line containing `pos` carries a
+// `// safe-ignore: <reason>` annotation. namedargs reports at an argument
+// column inside a call expression, so a line-based lookup is used rather than
+// a strict trailing one.
+func hasSafeIgnore(pass *analyzer.Pass, file *ast.File, pos token.Pos) bool {
+	for _, cg := range astutil.LineComments(pass.Fset, file, pos) {
+		if analyzer.HasAnnotation(cg, analyzer.AnnSafeIgnore) {
+			return true
+		}
+	}
+	return false
 }
 
 // calleeSignature returns the *types.Signature for the callee of a CallExpr,

@@ -57,6 +57,39 @@ func _() {
 	analyzertest.AssertNone(t, analyzertest.Run(t, get(), src))
 }
 
+func TestNamedArgs_safeIgnoreSameLine(t *testing.T) {
+	const src = `package p
+func transfer(userID, orderID string) {}
+func _() {
+	transfer("u-1", "o-2") // safe-ignore: positional args fixed by call site
+}`
+	analyzertest.AssertNone(t, analyzertest.Run(t, get(), src))
+}
+
+func TestNamedArgs_safeIgnoreOnClosingLine(t *testing.T) {
+	const src = `package p
+func transfer(userID, orderID string) {}
+func _() {
+	transfer(
+		"u-1",
+		"o-2",
+	) // safe-ignore: positional args fixed by call site
+}`
+	analyzertest.AssertNone(t, analyzertest.Run(t, get(), src))
+}
+
+func TestNamedArgs_safeIgnoreWithoutReasonStillFires(t *testing.T) {
+	const src = `package p
+func transfer(userID, orderID string) {}
+func _() {
+	transfer("u-1", "o-2") // safe-ignore:
+}`
+	issues := analyzertest.Run(t, get(), src)
+	if len(issues) != 2 {
+		t.Fatalf("got %d issues, want 2 (bare safe-ignore must not suppress)", len(issues))
+	}
+}
+
 func get() *analyzer.Analyzer {
 	for _, a := range analyzer.All() {
 		if a.Name == "namedargs" {
