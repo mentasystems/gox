@@ -5,9 +5,19 @@
 // both compilable Go but mean opposite things; this is one of the highest-
 // frequency silent bug classes when code is written without supervision.
 //
-// Required form at the call site:
+// Required form at the call site — each labelled argument on its own line:
 //
-//	transfer(/* userID */ a, /* orderID */ b)
+//	transfer(
+//		/* userID */ a,
+//		/* orderID */ b,
+//	)
+//
+// The own-line placement matters: on a single line `gofmt` relocates the
+// block comment so it trails the *previous* argument
+// (`a, /* orderID */ b` -> `a /* orderID */, b`), silently mis-naming the
+// value — the very swap-bug this rule exists to prevent. Only the own-line
+// form (and the first argument, which has no predecessor on its line) is a
+// `gofmt` fixed point, so the rule accepts only those.
 //
 // The comment text must match the parameter name from the declaration. The
 // rule fires only when the function has 2+ consecutive parameters of the same
@@ -123,23 +133,52 @@ func checkCall(pass *analyzer.Pass, file *ast.File, call *ast.CallExpr) {
 		if id, ok := arg.(*ast.Ident); ok && id.Name == names[i] {
 			continue
 		}
-		wantedName := names[i]
-		got := leadingArgComment(pass.Fset, file, arg.Pos())
-		if got == wantedName {
-			continue
-		}
 		// Per-argument opt-out (for multi-line calls where the annotation sits
 		// on a specific argument's line).
 		if hasSafeIgnore(pass, file, arg.Pos()) {
 			continue
 		}
-		pass.Report(analyzer.Issue{
-			Analyzer: "namedargs",
-			Pos:      pass.Fset.Position(arg.Pos()),
-			Message:  fmt.Sprintf("argument shares a type with an adjacent argument; prefix with /* %s */", wantedName),
-			Hint:     fmt.Sprintf("change to: /* %s */ %s", wantedName, exprSrc(pass.Fset, arg)),
-		})
+		wantedName := names[i]
+		labelled := leadingArgComment(pass.Fset, file, arg.Pos()) == wantedName
+
+		// A `/* name */ arg` label only stays attached to its argument under
+		// `gofmt` when the argument does not share a source line with the
+		// argument before it. On a single line `gofmt` relocates the block
+		// comment so it trails the *previous* argument
+		// (`a, /* to */ b` -> `a /* to */, b`), silently mis-naming the value.
+		// The first argument has no predecessor on its line, so its label is
+		// always stable; every later argument must sit on its own line.
+		stablePlacement := i == 0 || !sharesLineWithPrev(pass.Fset, call.Args[i-1], arg)
+
+		switch {
+		case labelled && stablePlacement:
+			// Correctly labelled in a gofmt-stable position.
+		case labelled && !stablePlacement:
+			// Label is present but gofmt will relocate it (or already has):
+			// turn this otherwise-silent breakage into a visible finding.
+			pass.Report(analyzer.Issue{
+				Analyzer: "namedargs",
+				Pos:      pass.Fset.Position(arg.Pos()),
+				Message:  fmt.Sprintf("/* %s */ label shares a line with the previous argument; gofmt relocates it and silently mis-names the argument", wantedName),
+				Hint:     fmt.Sprintf("put the labelled argument on its own line: /* %s */ %s,", wantedName, exprSrc(pass.Fset, arg)),
+			})
+		default:
+			pass.Report(analyzer.Issue{
+				Analyzer: "namedargs",
+				Pos:      pass.Fset.Position(arg.Pos()),
+				Message:  fmt.Sprintf("argument shares a type with an adjacent argument; prefix with /* %s */ on its own line", wantedName),
+				Hint:     fmt.Sprintf("change to a labelled argument on its own line: /* %s */ %s,", wantedName, exprSrc(pass.Fset, arg)),
+			})
+		}
 	}
+}
+
+// sharesLineWithPrev reports whether `arg` begins on the same source line that
+// the preceding argument `prev` ends on. When two arguments share a line, a
+// leading /* name */ comment on the later one is not a gofmt fixed point:
+// gofmt moves the comment back so it trails `prev`.
+func sharesLineWithPrev(fset *token.FileSet, prev, arg ast.Expr) bool {
+	return fset.Position(prev.End()).Line == fset.Position(arg.Pos()).Line
 }
 
 // hasSafeIgnore reports whether the source line containing `pos` carries a

@@ -18,9 +18,34 @@ transfer(orderID, userID, amount) // swap-prone, silent
 
 ## Good
 
+Put each labelled argument on its own line:
+
+```go
+transfer(
+	/* from */ srcID,
+	/* to */ dstID,
+	amount,
+)
+```
+
+### gofmt-stability (why own-line)
+
+A single-line label is **not** a `gofmt` fixed point. On one line `gofmt`
+relocates the block comment so it trails the *previous* argument:
+
 ```go
 transfer(/* from */ srcID, /* to */ dstID, amount)
+// gofmt rewrites the above to:
+transfer(/* from */ srcID /* to */, dstID, amount)
 ```
+
+Now `/* to */` documents `srcID` instead of `dstID` — the opposite of the
+truth, and exactly the swap-bug this rule exists to catch. Because editors run
+`gofmt`/`goimports` on save, this happens by accident. The rule therefore
+**rejects single-line labels** (firing on every argument that shares a line
+with the one before it) and accepts only the own-line form, which `gofmt`
+leaves untouched. The first argument may stay on the opening-paren line — it
+has no predecessor whose label could be relocated.
 
 ## Opt-out
 

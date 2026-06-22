@@ -20,13 +20,59 @@ func _() {
 	}
 }
 
-func TestNamedArgs_inlineCommentsSatisfy(t *testing.T) {
+func TestNamedArgs_ownLineCommentsSatisfy(t *testing.T) {
+	// The gofmt-stable form: each labelled argument on its own line.
+	const src = `package p
+func transfer(userID, orderID string) {}
+func _() {
+	transfer(
+		/* userID */ "u-1",
+		/* orderID */ "o-2",
+	)
+}`
+	analyzertest.AssertNone(t, analyzertest.Run(t, get(), src))
+}
+
+func TestNamedArgs_firstArgSharesLparenLineSatisfies(t *testing.T) {
+	// gofmt fixed point too: the first argument may sit on the opening-paren
+	// line because it has no predecessor whose label gofmt could relocate.
+	const src = `package p
+func transfer(userID, orderID string) {}
+func _() {
+	transfer( /* userID */ "u-1",
+		/* orderID */ "o-2",
+	)
+}`
+	analyzertest.AssertNone(t, analyzertest.Run(t, get(), src))
+}
+
+func TestNamedArgs_singleLineMangledIsFlagged(t *testing.T) {
+	// The shape gofmt produces from a single-line labelled call. The relocated
+	// /* orderID */ comment used to satisfy the rule silently; it must now fire
+	// on the second argument (the first argument's label is still stable).
 	const src = `package p
 func transfer(userID, orderID string) {}
 func _() {
 	transfer( /* userID */ "u-1" /* orderID */, "o-2")
 }`
-	analyzertest.AssertNone(t, analyzertest.Run(t, get(), src))
+	issues := analyzertest.Run(t, get(), src)
+	if len(issues) != 1 {
+		t.Fatalf("got %d issues, want 1 (the relocated label must be flagged)", len(issues))
+	}
+}
+
+func TestNamedArgs_singleLineCorrectPlacementIsFlagged(t *testing.T) {
+	// Even a correctly-placed single-line label is not a gofmt fixed point —
+	// gofmt would relocate it — so it must be flagged before that happens.
+	const src = `package p
+func transfer(userID, orderID string) {}
+func _() {
+	transfer( /* userID */ "u-1", /* orderID */ "o-2")
+}`
+	issues := analyzertest.Run(t, get(), src)
+	if len(issues) != 1 {
+		t.Fatalf("got %d issues, want 1 (single-line label is not gofmt-stable)", len(issues))
+	}
 }
 
 func TestNamedArgs_identNameMatchesParam(t *testing.T) {

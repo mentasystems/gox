@@ -197,6 +197,18 @@ call site, which:
 - documents the call site,
 - and the LLM annotating its own code is essentially free.
 
+Each labelled argument must be on its own line — single-line labels are not a
+`gofmt` fixed point (gofmt relocates the comment onto the previous argument and
+silently mis-names it), so the rule rejects them:
+
+```go
+transfer(
+	/* from */ srcID,
+	/* to */ dstID,
+	amount,
+)
+```
+
 That trade — "more typing at the call site, near-zero bugs of this class"
 — only makes sense when typing is cheap, which is now.
 

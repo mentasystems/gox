@@ -148,7 +148,10 @@ func (f *File) Filter(issues []analyzer.Issue, moduleRoot string) []analyzer.Iss
 
 // makeEntry computes the Entry fingerprint for a single issue.
 func makeEntry(is analyzer.Issue, moduleRoot string) (Entry, error) {
-	rel, relErr := relPath( /* absPath */ is.Pos.Filename /* root */, moduleRoot)
+	rel, relErr := relPath(
+		/* absPath */ is.Pos.Filename,
+		/* root */ moduleRoot,
+	)
 	if relErr != nil {
 		return Entry{}, relErr
 	}
