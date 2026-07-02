@@ -14,7 +14,8 @@ The bug above (`transfer("o-42", "u-7")` with parameters declared as
 `userID, orderID string`) compiles, passes every test, and ships to
 production. No major Go linter today catches this class. `gox` does, by
 demanding inline `/* paramName */` comments at the call site whenever
-two adjacent arguments share a type.
+two adjacent arguments share a type. (`namedargs` lives in the opt-in
+style tier — see [Rules](#rules).)
 
 The goal: catch the classes of bugs an LLM writing Go without supervision is
 most likely to introduce. Be loud, be opinionated, fail closed.
