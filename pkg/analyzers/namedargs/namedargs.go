@@ -51,6 +51,7 @@ func init() {
 		Doc:         "requires inline `/* paramName */` comments when consecutive params share a type",
 		Explanation: explanation,
 		Run:         run,
+		OptIn:       true,
 	})
 }
 

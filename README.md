@@ -33,10 +33,11 @@ go install github.com/mentasystems/gox/cmd/gox@latest
 ## Use
 
 ```sh
-gox check ./...        # analyze; exit 1 on any issue
-gox check --skip=shadow,namedargs ./...
-                       # run all analyzers except the named ones (env: GOX_SKIP)
-gox list               # list registered analyzers
+gox check ./...        # run the default (bug-tier) analyzers; exit 1 on any issue
+gox check --all ./...  # one-off full run: also the opt-in style tier (env: GOX_ALL=1)
+gox check --skip=errcheck ./...
+                       # skip named analyzers for this run (env: GOX_SKIP)
+gox list               # list registered analyzers (opt-in ones are marked)
 gox explain <rule>     # print the rule's reference markdown
 gox build [args]       # gox check && go build
 gox test  [args]       # gox check && go test
@@ -44,20 +45,32 @@ gox test  [args]       # gox check && go test
 
 ## Rules
 
+Rules come in two tiers. The **bug tier** runs by default. The **style tier**
+is opt-in (`gox check --all`): a month of real agent transcripts showed that,
+enforced in an agent loop, style rules overwhelmingly produce suppression
+annotations rather than fixes — noise that drowns the bug tier.
+
+Bug tier (default):
+
 | Analyzer | What it catches |
 |---|---|
 | `errcheck` | `error` return values dropped silently |
-| `shadow` | `:=` re-declaring an outer variable (except `ok`) |
 | `forcetypeassert` | `x := v.(T)` without the comma-ok form |
-| `namedargs` | call sites passing 2+ args of the same basic type without `/* paramName */` comments (user code only — stdlib calls exempt) |
 | `exhaustive` | non-exhaustive switch on iota enums or sealed interfaces |
-| `noglobals` | mutable package-level `var` declarations |
-| `banany` | `any` / `interface{}` in declarations without justification |
 | `bodyclose` | `*http.Response.Body` left unclosed |
 | `contextcheck` | `context.Background()`/`TODO()` inside a function that already receives a `context.Context` |
-| `goroutine` | `go f()` without a visible `*errgroup.Group`, `sync.WaitGroup`, or `context.CancelFunc` |
 | `errorlint` | `==` / type-assert / `%s` on errors instead of `errors.Is` / `errors.As` / `%w` |
 | `httptimeout` | HTTP shortcut calls or `http.Client` literals with no `Timeout` set |
+
+Style tier (opt-in, `--all`):
+
+| Analyzer | What it catches |
+|---|---|
+| `shadow` | `:=` re-declaring an outer variable (except `ok`) |
+| `namedargs` | call sites passing 2+ args of the same basic type without `/* paramName */` comments (user code only — stdlib calls exempt) |
+| `noglobals` | mutable package-level `var` declarations |
+| `banany` | `any` / `interface{}` in declarations without justification |
+| `goroutine` | `go f()` without a visible `*errgroup.Group`, `sync.WaitGroup`, or `context.CancelFunc` |
 
 ## Annotations
 
@@ -128,12 +141,9 @@ large packages.
 
 Two guards keep the hook's signal-to-noise high:
 
-- **Style rules are skipped by default in the hook** (not in `gox check`
-  itself): `banany`, `goroutine`, `namedargs`, `noglobals`, `shadow`. A
-  month of real agent transcripts showed these produce suppression
-  annotations rather than fixes when enforced at turn end. Override with
-  `GOX_HOOK_SKIP` (comma-separated names; set it empty to enforce every
-  rule).
+- **Only the bug tier runs** — the hook calls plain `gox check`, which
+  defaults to the bug-tier rules. To change what the hook enforces, pass
+  flags through `GOX_HOOK_FLAGS` (e.g. `"--all"` or `"--skip=errcheck"`).
 - **Identical reports are never repeated**: the hook remembers (per session,
   under `~/.cache/gox/hook/`) the last output it blocked with and stays
   silent if a later turn would produce the exact same report. This also

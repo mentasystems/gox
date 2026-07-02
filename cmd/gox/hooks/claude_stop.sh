@@ -11,9 +11,9 @@
 #     the repo, even turns that never edited it (the same issue was observed
 #     re-reported 73 times). If the transcript is unavailable (e.g. Grok),
 #     fall back to all dirty files.
-#   - Check selection: style-heavy analyzers are skipped by default; they
-#     accounted for ~60% of findings and produced suppression annotations,
-#     not fixes. Override with GOX_HOOK_SKIP (set empty to run everything).
+#   - Check selection: `gox check` itself defaults to the bug-tier analyzers
+#     (style tier is opt-in via --all), so the hook adds no filtering of its
+#     own. Pass extra flags with GOX_HOOK_FLAGS (e.g. "--all").
 #   - Dedup: if the output is byte-identical to what this session was already
 #     blocked with, do not block again (kills repeat-spam and stop-loops).
 #
@@ -31,9 +31,9 @@ CWD=$(printf '%s' "$PAYLOAD" | jq -r '.cwd // empty')
 GOX="${GOX_BIN:-${HOME}/go/bin/gox}"
 [ -x "$GOX" ] || exit 0
 
-# Analyzers skipped in the hook (not in gox itself): the noisy style tier.
-# GOX_HOOK_SKIP overrides; explicitly-empty means "skip nothing".
-SKIP="${GOX_HOOK_SKIP-banany,goroutine,namedargs,noglobals,shadow}"
+# Extra flags for `gox check` (e.g. GOX_HOOK_FLAGS="--all" to include the
+# opt-in style tier).
+HOOK_FLAGS="${GOX_HOOK_FLAGS:-}"
 
 # Resolve git root; bail quietly if not a repo.
 ROOT=$(cd "$CWD" && git rev-parse --show-toplevel 2>/dev/null) || exit 0
@@ -94,7 +94,8 @@ DIRS=$(
 OUT=""
 while IFS= read -r d; do
   [ -d "$d" ] || continue
-  RES=$(cd "$d" && "$GOX" check --skip="$SKIP" . 2>&1)
+  # shellcheck disable=SC2086 — HOOK_FLAGS is intentionally word-split
+  RES=$(cd "$d" && "$GOX" check $HOOK_FLAGS . 2>&1)
   if [ -n "$RES" ]; then
     OUT="${OUT}${OUT:+$'\n\n'}${RES}"
   fi

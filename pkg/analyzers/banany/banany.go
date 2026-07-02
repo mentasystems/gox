@@ -28,6 +28,7 @@ func init() {
 		Doc:         "forbids `any` / `interface{}` without an // any-ok: justification",
 		Explanation: explanation,
 		Run:         run,
+		OptIn:       true,
 	})
 }
 

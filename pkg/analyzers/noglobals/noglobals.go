@@ -28,6 +28,7 @@ func init() {
 		Doc:         "forbids mutable package-level var declarations without justification",
 		Explanation: explanation,
 		Run:         run,
+		OptIn:       true,
 	})
 }
 

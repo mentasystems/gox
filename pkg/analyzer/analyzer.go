@@ -38,6 +38,11 @@ type Analyzer struct {
 	// at init time. May be empty.
 	Explanation string
 	Run         func(*Pass)
+	// OptIn excludes the rule from the default `gox check` run; it only runs
+	// with `gox check --all` (or when named explicitly). Style-tier rules are
+	// opt-in: enforced at agent turn end they overwhelmingly produce
+	// suppression annotations instead of fixes, drowning the bug-tier rules.
+	OptIn bool
 }
 
 // Annotation prefixes recognised on trailing line comments to opt out of a rule.

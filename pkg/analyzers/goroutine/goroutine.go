@@ -34,6 +34,7 @@ func init() {
 		Doc:         "goroutines must run in a scope with a visible lifecycle primitive",
 		Explanation: explanation,
 		Run:         run,
+		OptIn:       true,
 	})
 }
 

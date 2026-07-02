@@ -28,6 +28,7 @@ func init() {
 		Doc:         "reports variables that shadow names from an outer scope",
 		Explanation: explanation,
 		Run:         run,
+		OptIn:       true,
 	})
 }
 

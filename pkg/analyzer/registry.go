@@ -15,6 +15,19 @@ func Register(a *Analyzer) {
 	registered[a.Name] = a
 }
 
+// Defaults returns every registered analyzer that runs by default (OptIn
+// false), sorted by name.
+func Defaults() []*Analyzer {
+	out := make([]*Analyzer, 0, len(registered))
+	for _, a := range registered {
+		if !a.OptIn {
+			out = append(out, a)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
 // All returns every registered analyzer sorted by name.
 func All() []*Analyzer {
 	out := make([]*Analyzer, 0, len(registered))

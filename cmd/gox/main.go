@@ -82,8 +82,9 @@ func usage() {
 
 Usage:
   gox check [flags] [packages...]
-                            run all analyzers; exit 1 on any issue
-  gox list                  list registered analyzers
+                            run the default (bug-tier) analyzers; exit 1 on
+                            any issue
+  gox list                  list registered analyzers ("opt-in" = --all only)
   gox explain <rule>        print the rule's reference markdown (use --json for envelope)
   gox build [args...]       run check, then go build
   gox test  [args...]       run check, then go test
@@ -93,6 +94,8 @@ Usage:
   gox install grok          install Stop hook into ~/.grok/hooks/gox.json (Grok Build)
 
 check flags:
+  --all                     also run the opt-in style-tier analyzers
+                            (env: GOX_ALL=1)
   --no-cache                disable the incremental cache
   --no-baseline             ignore .gox-baseline.json; report all issues
   --stats                   print cache hit/miss counts and elapsed time
@@ -105,7 +108,11 @@ check flags:
 
 func runList() {
 	for _, a := range analyzer.All() {
-		fmt.Printf("%-22s %s\n", a.Name, a.Doc)
+		tag := ""
+		if a.OptIn {
+			tag = " (opt-in: runs only with --all)"
+		}
+		fmt.Printf("%-22s %s%s\n", a.Name, a.Doc, tag)
 	}
 }
 
@@ -116,12 +123,13 @@ func runCheck(args []string) int {
 	stats := fs.Bool("stats", false, "print cache hit/miss counts and elapsed time")
 	maxIssues := fs.Int("max-issues", defaultMaxIssues(), "cap printed issues; 0 = unlimited (env: GOX_MAX_ISSUES)")
 	skip := fs.String("skip", os.Getenv("GOX_SKIP"), "comma-separated analyzer names to skip (env: GOX_SKIP)")
+	all := fs.Bool("all", os.Getenv("GOX_ALL") == "1", "also run the opt-in style-tier analyzers (env: GOX_ALL=1)")
 	if parseErr := fs.Parse(args); parseErr != nil {
 		return 2
 	}
 	patterns := fs.Args()
 
-	analyzers, skipErr := selectAnalyzers(*skip)
+	analyzers, skipErr := selectAnalyzers(*all, *skip)
 	if skipErr != nil {
 		fmt.Fprintln(os.Stderr, "gox:", skipErr)
 		return 2
@@ -194,14 +202,20 @@ func defaultMaxIssues() int {
 	return defaultMaxIssuesValue
 }
 
-// selectAnalyzers resolves the analyzer set for a run: every registered
-// analyzer minus the comma-separated names in skip. Unknown names are an
-// error so a typo does not silently re-enable a rule.
-func selectAnalyzers(skip string) ([]*analyzer.Analyzer, error) {
-	all := analyzer.All()
-	if skip == "" {
-		return all, nil
+// selectAnalyzers resolves the analyzer set for a run: the default (bug-tier)
+// analyzers, or every registered one with all=true, minus the comma-separated
+// names in skip. Skip names are validated against the full registry — so
+// skipping an opt-in rule without --all is a no-op, but a typo is an error
+// and does not silently re-enable a rule.
+func selectAnalyzers(all bool, skip string) ([]*analyzer.Analyzer, error) {
+	base := analyzer.Defaults()
+	if all {
+		base = analyzer.All()
 	}
+	if skip == "" {
+		return base, nil
+	}
+	registry := analyzer.All()
 	skipped := map[string]bool{}
 	for _, name := range strings.Split(skip, ",") {
 		name = strings.TrimSpace(name)
@@ -209,7 +223,7 @@ func selectAnalyzers(skip string) ([]*analyzer.Analyzer, error) {
 			continue
 		}
 		found := false
-		for _, a := range all {
+		for _, a := range registry {
 			if a.Name == name {
 				found = true
 				break
@@ -220,8 +234,8 @@ func selectAnalyzers(skip string) ([]*analyzer.Analyzer, error) {
 		}
 		skipped[name] = true
 	}
-	out := make([]*analyzer.Analyzer, 0, len(all))
-	for _, a := range all {
+	out := make([]*analyzer.Analyzer, 0, len(base))
+	for _, a := range base {
 		if !skipped[a.Name] {
 			out = append(out, a)
 		}
