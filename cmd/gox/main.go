@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/mentasystems/gox/pkg/analyzer"
@@ -97,6 +98,8 @@ check flags:
   --stats                   print cache hit/miss counts and elapsed time
   --max-issues N            cap printed issues (default 100, 0 = unlimited;
                             env: GOX_MAX_ISSUES)
+  --skip a,b,...            skip the named analyzers for this run
+                            (env: GOX_SKIP; see "gox list" for names)
 `)
 }
 
@@ -112,12 +115,23 @@ func runCheck(args []string) int {
 	noBaseline := fs.Bool("no-baseline", false, "ignore .gox-baseline.json; report all issues")
 	stats := fs.Bool("stats", false, "print cache hit/miss counts and elapsed time")
 	maxIssues := fs.Int("max-issues", defaultMaxIssues(), "cap printed issues; 0 = unlimited (env: GOX_MAX_ISSUES)")
+	skip := fs.String("skip", os.Getenv("GOX_SKIP"), "comma-separated analyzer names to skip (env: GOX_SKIP)")
 	if parseErr := fs.Parse(args); parseErr != nil {
 		return 2
 	}
 	patterns := fs.Args()
 
-	issues, runStats, elapsed, runErr := runAnalyzers(patterns, *noCache)
+	analyzers, skipErr := selectAnalyzers(*skip)
+	if skipErr != nil {
+		fmt.Fprintln(os.Stderr, "gox:", skipErr)
+		return 2
+	}
+	if len(analyzers) == 0 {
+		fmt.Fprintln(os.Stderr, "gox: --skip disables every registered analyzer")
+		return 2
+	}
+
+	issues, runStats, elapsed, runErr := runAnalyzers(patterns, analyzers, *noCache)
 	if runErr != nil {
 		fmt.Fprintln(os.Stderr, "gox:", runErr)
 		return 2
@@ -180,10 +194,44 @@ func defaultMaxIssues() int {
 	return defaultMaxIssuesValue
 }
 
+// selectAnalyzers resolves the analyzer set for a run: every registered
+// analyzer minus the comma-separated names in skip. Unknown names are an
+// error so a typo does not silently re-enable a rule.
+func selectAnalyzers(skip string) ([]*analyzer.Analyzer, error) {
+	all := analyzer.All()
+	if skip == "" {
+		return all, nil
+	}
+	skipped := map[string]bool{}
+	for _, name := range strings.Split(skip, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		found := false
+		for _, a := range all {
+			if a.Name == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("--skip: unknown analyzer %q (see `gox list`)", name)
+		}
+		skipped[name] = true
+	}
+	out := make([]*analyzer.Analyzer, 0, len(all))
+	for _, a := range all {
+		if !skipped[a.Name] {
+			out = append(out, a)
+		}
+	}
+	return out, nil
+}
+
 // runAnalyzers wires the cache and runs the analyzers — shared by `check`
 // and `baseline`.
-func runAnalyzers(patterns []string, noCache bool) ([]analyzer.Issue, analyzer.Stats, time.Duration, error) {
-	analyzers := analyzer.All()
+func runAnalyzers(patterns []string, analyzers []*analyzer.Analyzer, noCache bool) ([]analyzer.Issue, analyzer.Stats, time.Duration, error) {
 	opts := analyzer.RunOptions{UseCache: !noCache}
 
 	if opts.UseCache {
@@ -247,7 +295,9 @@ func runBaseline(args []string) int {
 		return 2
 	}
 
-	issues, _, _, runErr := runAnalyzers(patterns, *noCache)
+	// Baselines always capture with the full analyzer set so a later
+	// `check --skip=...` still filters against a complete snapshot.
+	issues, _, _, runErr := runAnalyzers(patterns, analyzer.All(), *noCache)
 	if runErr != nil {
 		fmt.Fprintln(os.Stderr, "gox baseline:", runErr)
 		return 2

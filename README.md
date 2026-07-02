@@ -34,6 +34,8 @@ go install github.com/mentasystems/gox/cmd/gox@latest
 
 ```sh
 gox check ./...        # analyze; exit 1 on any issue
+gox check --skip=shadow,namedargs ./...
+                       # run all analyzers except the named ones (env: GOX_SKIP)
 gox list               # list registered analyzers
 gox explain <rule>     # print the rule's reference markdown
 gox build [args]       # gox check && go build
@@ -111,8 +113,11 @@ Stop hook in `~/.grok/hooks/gox.json` (native Grok hook file). Multiple
 the Stop array for our entry and leaves other events or user content intact.
 
 When the agent finishes a turn, the hook scans the current git repo for
-changed `.go` files (unstaged, staged, and untracked) and runs `gox check`
-once per affected package. If issues are found, the hook returns a
+changed `.go` files (unstaged, staged, and untracked), narrows them to the
+files actually modified during that turn (mtime >= the last user message's
+timestamp, read from the transcript; without a transcript — e.g. Grok — it
+falls back to all dirty files), and runs `gox check` once per affected
+package. If issues are found, the hook returns a
 `{"decision":"block","reason":"..."}` payload. Claude surfaces it on the
 next turn; Grok records it as a hook annotation in the scrollback (and, for
 Stop hooks, the same shape is supported for feeding issues back).
@@ -120,6 +125,19 @@ Stop hooks, the same shape is supported for feeding issues back).
 The hook runs once per turn (on `Stop`) rather than on every edit. Earlier
 versions used `PostToolUse` on each `Edit`/`Write`, which was too slow on
 large packages.
+
+Two guards keep the hook's signal-to-noise high:
+
+- **Style rules are skipped by default in the hook** (not in `gox check`
+  itself): `banany`, `goroutine`, `namedargs`, `noglobals`, `shadow`. A
+  month of real agent transcripts showed these produce suppression
+  annotations rather than fixes when enforced at turn end. Override with
+  `GOX_HOOK_SKIP` (comma-separated names; set it empty to enforce every
+  rule).
+- **Identical reports are never repeated**: the hook remembers (per session,
+  under `~/.cache/gox/hook/`) the last output it blocked with and stays
+  silent if a later turn would produce the exact same report. This also
+  prevents stop-loops.
 
 - Claude Code re-reads `settings.json` when `/hooks` is opened or the app
   restarts.
